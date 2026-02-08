@@ -1,0 +1,18 @@
+telegram:
+  bot:
+    token: "8350253871:AAE53KAPTl3_hhzLnkklj2WCsBBw1pBwUkQ"
+    username: "analytics-bot"
+spring:
+  datasource:
+    username: postgres
+    password: postgres
+    url: jdbc:postgresql://localhost:5432/telegram_analytics
+  jpa:
+    hibernate:
+      ddl-auto: validate
+    open-in-view: false
+    show-sql: true
+
+app:
+  channels:
+    max-per-user: 10
