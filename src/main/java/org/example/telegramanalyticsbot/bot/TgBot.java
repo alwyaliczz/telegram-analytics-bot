@@ -2,6 +2,9 @@ package org.example.telegramanalyticsbot.bot;
 
 import lombok.SneakyThrows;
 import lombok.extern.slf4j.Slf4j;
+import org.example.telegramanalyticsbot.channels.ChannelEntity;
+import org.example.telegramanalyticsbot.channels.ChannelInfo;
+import org.example.telegramanalyticsbot.channels.ChannelValidator;
 import org.example.telegramanalyticsbot.commandHandlers.CommandHandler;
 import org.example.telegramanalyticsbot.commandHandlers.MessageSender;
 import org.telegram.telegrambots.bots.DefaultBotOptions;
@@ -16,13 +19,15 @@ public class TgBot extends TelegramLongPollingBot {
     private final String botUsername;
     private final CommandHandler handler;
     private final MessageSender sender;
+    private final ChannelValidator validator;
 
-    public TgBot(DefaultBotOptions options, String token, String botUsername, CommandHandler handler, MessageSender sender) {
+    public TgBot(DefaultBotOptions options, String token, String botUsername, CommandHandler handler, MessageSender sender, ChannelValidator validator) {
         super(options);
         this.token = token;
         this.botUsername = botUsername;
         this.handler = handler;
         this.sender = sender;
+        this.validator = validator;
     }
 
     @Override
@@ -51,6 +56,9 @@ public class TgBot extends TelegramLongPollingBot {
                 case "/remove":
                     removeChannelCommand(chatId, arguments);
                     break;
+                case "/info":
+                    getChannelInfo(chatId, arguments);
+                    break;
                 default:
                     //todo: make a proper non-command reply
                     sender.sendMessage(this, chatId, "default reply");
@@ -71,10 +79,32 @@ public class TgBot extends TelegramLongPollingBot {
             sender.sendMessage(this, chatId, "use: /add @username");
             return;
         }
+
         String username = arguments.trim();
-        handler.addChannel(username, chatId);
-        String response = "channel: " + username + " has been added";
-        sender.sendMessage(this, chatId, response);
+        ChannelInfo info = validator.getChannelInfo(username);
+
+        if (!info.isExists()) {
+            sender.sendMessage(this, chatId, "channel: " + username + " doesn't exist");
+            return;
+        }
+
+        if (!info.isPublic()) {
+            sender.sendMessage(this, chatId, "channel: " + username + " is private");
+            return;
+        }
+
+
+        boolean added = handler.addChannel(username, chatId);
+        if (added){
+            String showSubs = info.getSubscribers() != null
+                    ? String.format("Subscribers: %,d", info.getSubscribers())
+                    : "Subscribers: ???";
+            String response = "channel: " + username + " has been added, "+showSubs;
+            sender.sendMessage(this, chatId, response);
+        }
+        else{
+            sender.sendMessage(this, chatId, "channel is already in your list");
+        }
     }
 
     private void removeChannelCommand(Long chatId, String arguments) {
@@ -86,8 +116,30 @@ public class TgBot extends TelegramLongPollingBot {
         handler.removeChannel(username, chatId);
         String response = "channel: " + username + " has been removed";
         sender.sendMessage(this, chatId, response);
+        //todo make a proper error response (/remove [doesn't exist])
     }
 
+    private void getChannelInfo(Long chatId, String arguments){
+        try {
+            if (arguments.trim().isEmpty()) {
+                sender.sendMessage(this, chatId, "use: /get-info (@)username");
+                return;
+            }
+            String username = arguments.trim();
+            ChannelEntity channel = handler.getChannelInfo(username, chatId);
+
+            ChannelInfo info = validator.getChannelInfo(channel.getUsername());
+            String response =
+                    info.getTitle()+"\n"+
+                    "username: "+ info.getUsername()+"\n"+
+                     String.format("subscribers: %,d", info.getSubscribers());
+
+            sender.sendMessage(this, chatId, response);
+        } catch (Exception e) {
+            sender.sendMessage(this, chatId, "channel not found in your list");
+        }
+
+    }
 
     @Override
     public void onUpdatesReceived(List<Update> updates) {

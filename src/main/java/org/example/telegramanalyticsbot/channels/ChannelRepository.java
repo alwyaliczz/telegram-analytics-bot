@@ -16,6 +16,7 @@ public interface ChannelRepository extends JpaRepository<ChannelEntity, Long> {
     Long countChannelEntitiesByOwnerChatId(Long ownerChatId);
 
 
+
 }
 
 

@@ -1,11 +1,13 @@
 package org.example.telegramanalyticsbot.channels;
 
+import jakarta.persistence.EntityNotFoundException;
 import jakarta.transaction.Transactional;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 
+import java.time.LocalDateTime;
 import java.util.List;
 
 @Service
@@ -13,58 +15,71 @@ import java.util.List;
 @RequiredArgsConstructor
 public class ChannelService {
     private final ChannelRepository repository;
+    private final ChannelValidator validator;
+    private final SubscribersService subscribersService;
 
     @Value("${app.channels.max-per-user}")
     private int maxChannels;
 
     @Transactional
-    public ChannelEntity addChannel(String username, Long ownerChatId){
+    public ChannelEntity addChannel(String username, Long ownerChatId) {
         log.info("add channel = {}, user = {}", username, ownerChatId);
         String normalizedUsername = normalizeUsername(username);
-        isAvailable(normalizedUsername, ownerChatId);
-        canAddChannel(ownerChatId);
+
+        if (!validator.isChannelAvailable(normalizedUsername)) {
+            throw new IllegalArgumentException("Channel not found or private: " + normalizedUsername);
+        }
+
+        if (repository.existsByUsernameAndOwnerChatId(normalizedUsername, ownerChatId)) {
+            throw new IllegalStateException("Channel already added: " + normalizedUsername);
+        }
+
+        long count = repository.countChannelEntitiesByOwnerChatId(ownerChatId);
+        if (count >= maxChannels) {
+            throw new IllegalStateException("Max channels limit reached: " + maxChannels);
+        }
 
         ChannelEntity channel = ChannelEntity.builder()
                 .username(normalizedUsername)
                 .ownerChatId(ownerChatId)
+                .createdAt(LocalDateTime.now())
                 .build();
+
         ChannelEntity saved = repository.save(channel);
-        log.info("channel: {} added, id = {}", normalizedUsername, saved.getId());
+        log.info("channel added: {}, id = {}", normalizedUsername, saved.getId());
         return saved;
     }
 
-    @Transactional
-    public List<ChannelEntity> getChannelsByUser(Long ownerChatId){
+    @Transactional()
+    public List<ChannelEntity> getChannelsByUser(Long ownerChatId) {
         return repository.findChannelEntityByOwnerChatId(ownerChatId);
     }
 
-    public void removeChannel(String username,Long ownerChatId){
+    @Transactional
+    public void removeChannel(String username, Long ownerChatId) {
         String normalized = normalizeUsername(username);
 
-        ChannelEntity channel = repository.findByUsernameAndOwnerChatId(username, ownerChatId)
-                .orElseThrow(() -> new IllegalArgumentException("channel "+normalized+" not found"));
+        ChannelEntity channel = repository.findByUsernameAndOwnerChatId(normalized, ownerChatId)
+                .orElseThrow(() -> new IllegalArgumentException("Channel not found: " + normalized));
+
         repository.delete(channel);
-        log.info("channel: {} deleted", normalized);
+        log.info("channel removed: {}", normalized);
+    }
+
+    public ChannelEntity getInfo(String username, Long ownerChatId){
+        String normalized = normalizeUsername(username);
+        ChannelEntity entity = repository.findByUsernameAndOwnerChatId(normalized, ownerChatId)
+                .orElseThrow(() -> new EntityNotFoundException("Channel not found: " + normalized));
+
+        return entity;
     }
 
 
     private String normalizeUsername(String username) {
-        if (username.startsWith("@")) {
-            return username.toLowerCase();
-        } else {
-            return "@" + username.toLowerCase();
+        if (username == null || username.trim().isEmpty()) {
+            throw new IllegalArgumentException("Username cannot be empty");
         }
-    }
-    private void isAvailable(String username, Long ownerChatId){
-        String user = normalizeUsername(username);
-        if(repository.existsByUsernameAndOwnerChatId(username, ownerChatId)){
-            throw new IllegalStateException("channel "+username+" already added");
-        }
-    }
-    private void canAddChannel(Long ownerChatId){
-        long count = repository.countChannelEntitiesByOwnerChatId(ownerChatId);
-        if (count >= maxChannels){
-            throw new IllegalStateException("max amount of channels exceeded");
-        }
+        String trimmed = username.trim();
+        return trimmed.startsWith("@") ? trimmed.toLowerCase() : "@" + trimmed.toLowerCase();
     }
 }

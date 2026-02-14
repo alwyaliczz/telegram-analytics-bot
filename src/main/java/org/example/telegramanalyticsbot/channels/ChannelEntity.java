@@ -30,6 +30,8 @@ public class ChannelEntity {
     @Column(name = "created_at")
     private LocalDateTime createdAt;
 
+
+
     public ChannelEntity(String username, Long ownerChatId) {
         this.username = username;
         this.ownerChatId = ownerChatId;

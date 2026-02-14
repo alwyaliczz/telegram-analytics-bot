@@ -4,6 +4,7 @@ import lombok.SneakyThrows;
 import org.example.telegramanalyticsbot.bot.TgBot;
 import org.example.telegramanalyticsbot.channels.ChannelRepository;
 import org.example.telegramanalyticsbot.channels.ChannelService;
+import org.example.telegramanalyticsbot.channels.ChannelValidator;
 import org.example.telegramanalyticsbot.commandHandlers.CommandHandler;
 import org.example.telegramanalyticsbot.commandHandlers.MessageSender;
 import org.springframework.beans.factory.annotation.Value;
@@ -22,12 +23,13 @@ public class TelegramBotConfiguration {
             TelegramBotsApi telegramBotsApi,
             @Value("${telegram.bot.username}") String username,
             CommandHandler handler,
-            MessageSender messageSender
+            MessageSender messageSender,
+            ChannelValidator validator
 
     ){
         var botOptions = new DefaultBotOptions();
 
-        var bot = new TgBot(botOptions, botToken, username, handler, messageSender);
+        var bot = new TgBot(botOptions, botToken, username, handler, messageSender, validator);
 
         if (botToken == null || botToken.trim().isEmpty()) {
             throw new IllegalArgumentException("Bot token cannot be empty!");
